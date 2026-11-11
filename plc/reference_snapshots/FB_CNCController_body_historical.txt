@@ -1,0 +1,470 @@
+
+// FB_CNCController - V1.0
+// Automatic CNC machine cycle
+// Simulation-only sequence controller
+
+// ------------------------------------------
+// 1. Detect StartCycle rising edge
+// ------------------------------------------
+#StartEdge := #StartCycle AND NOT #PrevStart;
+#PrevStart := #StartCycle;
+
+// ------------------------------------------
+// 2. Execute watchdog timers every scan
+// ------------------------------------------
+#OpenTimer(IN := (#State = 11),
+           PT := T#5s);
+#ClampTimer(IN := (#State = 31), PT := T#4s);
+#CloseTimer(IN := (#State = 41),
+            PT := T#5s);
+#CycleTimer(IN := (#State = 51),
+            PT := T#20s);
+#ReopenTimer(IN := (#State = 61),
+             PT := T#5s);
+#UnclampTimer(IN := (#State = 71),
+              PT := T#4s);
+#ScrapTimer(
+            IN := (#State = 951)
+            OR (#State = 953)
+            OR (#State = 955)
+            OR (#State = 958),
+            PT := T#6s
+);
+
+// ------------------------------------------
+// 3. Reset operation commands each scan
+// ------------------------------------------
+"DB_CNCIO".Command.OpenDoor := FALSE;
+"DB_CNCIO".Command.CloseDoor := FALSE;
+"DB_CNCIO".Command.ClampChuck := FALSE;
+"DB_CNCIO".Command.UnclampChuck := FALSE;
+"DB_CNCIO".Command.StartCycle := FALSE;
+"DB_CNCIO".Command.SimLoadPart := FALSE;
+"DB_CNCIO".Command.SimUnloadPart := FALSE;
+"DB_CNCIO".Command.ResetFault := FALSE;
+
+#Done := FALSE;
+
+// ------------------------------------------
+// 4. Monitor simulator faults
+// ------------------------------------------
+IF "DB_CNCIO".Status.Fault
+    AND (#State <> 900)
+    AND (#State <> 910)
+    AND NOT ((#State >= 950) AND (#State <= 959))
+THEN
+    #ErrorCode := UINT#300;
+    #State := 900;
+    
+END_IF;
+
+
+// Abort an interrupted automatic CNC sequence.
+// This only changes the simulation controller state.
+IF #Abort AND (#State <> 0) THEN
+    
+    // Do not override the CNC controller while
+    // actual machining or actuator motion is active.
+    IF "DB_CNCIO".Status.MachineReady
+        AND NOT "DB_CNCIO".Status.CycleRunning
+        AND NOT "DB_CNCIO".Status.Fault THEN
+        
+        #State := 0;
+        #ErrorCode := UINT#0;
+        
+    END_IF;
+    
+END_IF;
+
+
+// Capture CNC scrap recovery request
+IF #ScrapRecovery THEN
+    #ScrapRequestSeen := TRUE;
+END_IF;
+
+// ------------------------------------------
+// 5. Automatic CNC state machine
+// ------------------------------------------
+CASE #State OF
+        
+    0: // IDLE
+        
+        IF #StartEdge THEN
+            
+            IF "DB_CNCIO".Status.MachineReady
+                AND NOT "DB_CNCIO".Status.PartPresent
+                AND NOT "DB_CNCIO".Status.ChuckClamped
+                AND "DB_CNCIO".Command.RobotClear THEN
+                
+                #ErrorCode := UINT#0;
+                #State := 10;
+                
+            ELSE
+                
+                #ErrorCode := UINT#301;
+                #State := 900;
+                
+            END_IF;
+            
+        END_IF;
+        
+    10: // REQUEST OPEN DOOR
+        
+        "DB_CNCIO".Command.OpenDoor := TRUE;
+        #State := 11;
+        
+    11: // WAIT FOR DOOR OPEN
+        
+        IF "DB_CNCIO".Status.DoorOpen
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 20;
+            
+        ELSIF #OpenTimer.Q THEN
+            
+            #ErrorCode := UINT#302;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    20: // LOAD WORKPIECE
+        
+        IF #ExternalHandling THEN
+            
+            // Wait until robot loading is completed
+            IF #LoadComplete THEN
+                "DB_CNCIO".Command.SimLoadPart := TRUE;
+                #State := 21;
+            END_IF;
+            
+        ELSE
+            
+            // Original standalone simulation
+            "DB_CNCIO".Command.SimLoadPart := TRUE;
+            #State := 21;
+            
+        END_IF;
+        
+        
+    21: // VERIFY LOADED WORKPIECE
+        
+        IF "DB_CNCIO".Status.PartPresent THEN
+            
+            #State := 30;
+            
+        ELSE
+            
+            #ErrorCode := UINT#303;
+            #State := 900;
+            
+        END_IF;
+        
+    30: // REQUEST CHUCK CLAMP
+        
+        "DB_CNCIO".Command.ClampChuck := TRUE;
+        #State := 31;
+        
+    31: // WAIT FOR CLAMP FEEDBACK
+        
+        IF "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 40;
+            
+        ELSIF #ClampTimer.Q THEN
+            
+            #ErrorCode := UINT#304;
+            #State := 900;
+            
+        END_IF;
+        
+    40: // REQUEST CLOSE DOOR
+        
+        IF "DB_CNCIO".Command.RobotClear THEN
+            
+            "DB_CNCIO".Command.CloseDoor := TRUE;
+            #State := 41;
+            
+        ELSE
+            
+            #ErrorCode := UINT#305;
+            #State := 900;
+            
+        END_IF;
+        
+    41: // WAIT FOR DOOR CLOSED
+        
+        IF "DB_CNCIO".Status.DoorClosed
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 50;
+            
+        ELSIF #CloseTimer.Q THEN
+            
+            #ErrorCode := UINT#306;
+            #State := 900;
+            
+        END_IF;
+        
+    50: // REQUEST MACHINING CYCLE
+        
+        IF "DB_CNCIO".Status.DoorClosed
+            AND "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.PartPresent
+            AND "DB_CNCIO".Command.RobotClear THEN
+            
+            "DB_CNCIO".Command.StartCycle := TRUE;
+            #State := 51;
+            
+        ELSE
+            
+            #ErrorCode := UINT#307;
+            #State := 900;
+            
+        END_IF;
+        
+    51: // WAIT FOR MACHINING COMPLETE
+        
+        IF "DB_CNCIO".Status.CycleComplete
+            AND NOT "DB_CNCIO".Status.CycleRunning THEN
+            
+            #State := 60;
+            
+        ELSIF #CycleTimer.Q THEN
+            
+            #ErrorCode := UINT#308;
+            #State := 900;
+            
+        END_IF;
+        
+    60: // REOPEN CNC DOOR
+        
+        "DB_CNCIO".Command.OpenDoor := TRUE;
+        #State := 61;
+        
+    61: // WAIT FOR DOOR OPEN
+        
+        IF "DB_CNCIO".Status.DoorOpen
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 70;
+            
+        ELSIF #ReopenTimer.Q THEN
+            
+            #ErrorCode := UINT#309;
+            #State := 900;
+            
+        END_IF;
+        
+    70: // REQUEST UNCLAMP
+        
+        "DB_CNCIO".Command.UnclampChuck := TRUE;
+        #State := 71;
+        
+    71: // WAIT FOR UNCLAMP FEEDBACK
+        
+        IF NOT "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 80;
+            
+        ELSIF #UnclampTimer.Q THEN
+            
+            #ErrorCode := UINT#310;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    80: // UNLOAD WORKPIECE
+        
+        IF #ExternalHandling THEN
+            
+            // Wait until robot unloading is completed
+            IF #UnloadComplete THEN
+                "DB_CNCIO".Command.SimUnloadPart := TRUE;
+                #State := 81;
+            END_IF;
+            
+        ELSE
+            
+            // Original standalone simulation
+            "DB_CNCIO".Command.SimUnloadPart := TRUE;
+            #State := 81;
+            
+        END_IF;
+        
+        
+    81: // VERIFY WORKPIECE REMOVED
+        
+        IF NOT "DB_CNCIO".Status.PartPresent
+            AND NOT "DB_CNCIO".Status.CycleComplete
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 100;
+            
+        ELSE
+            
+            #ErrorCode := UINT#311;
+            #State := 900;
+            
+        END_IF;
+        
+    100: // SUCCESSFUL CYCLE
+        
+        #Done := TRUE;
+        #State := 0;
+        
+    900: // FAULT WAITING FOR RESET
+        
+        IF #ScrapRecovery
+            AND ("DB_CNCIO".Status.FaultCode = UINT#106)
+            AND "DB_CNCIO".Status.PartPresent
+            AND "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.DoorClosed
+            AND NOT "DB_CNCIO".Status.CycleRunning THEN
+            
+            #State := 950;
+        ELSIF #Reset AND NOT #ScrapRecovery THEN
+            
+            // Existing normal fault recovery
+            #State := 910;
+        END_IF;
+         
+        
+    910: // VERIFY FAULT RESET
+        
+        IF NOT "DB_CNCIO".Status.Fault
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #ErrorCode := UINT#0;
+            #State := 0;
+            
+        END_IF;
+        
+    950: // RESET MACHINING FAULT
+        
+        "DB_CNCIO".Command.ResetFault := TRUE;
+        #State := 951;
+        
+        
+    951: // WAIT FOR CNC SIMULATOR IDLE
+        
+        IF "DB_CNCIO".Status.MachineReady
+            AND NOT "DB_CNCIO".Status.Fault THEN
+            
+            #State := 952;
+            
+        ELSIF #ScrapTimer.Q THEN
+            
+            #ErrorCode := UINT#320;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    952: // OPEN CNC DOOR
+        
+        "DB_CNCIO".Command.OpenDoor := TRUE;
+        #State := 953;
+        
+        
+    953: // VERIFY DOOR OPEN
+        
+        IF "DB_CNCIO".Status.DoorOpen
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 954;
+            
+        ELSIF #ScrapTimer.Q THEN
+            
+            #ErrorCode := UINT#321;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    954: // UNCLAMP REJECTED WORKPIECE
+        
+        "DB_CNCIO".Command.UnclampChuck := TRUE;
+        #State := 955;
+        
+        
+    955: // VERIFY CHUCK RELEASED
+        
+        IF NOT "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.DoorOpen
+            AND "DB_CNCIO".Status.PartPresent
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #State := 956;
+            
+        ELSIF #ScrapTimer.Q THEN
+            
+            #ErrorCode := UINT#322;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    956: // WAIT FOR ROBOT SCRAP UNLOAD
+        
+        IF #ScrapUnloadComplete THEN
+            
+            "DB_CNCIO".Command.SimUnloadPart := TRUE;
+            #State := 958;
+            
+        END_IF;
+        
+        
+    958: // VERIFY SCRAP REMOVED
+        
+        IF NOT "DB_CNCIO".Status.PartPresent
+            AND NOT "DB_CNCIO".Status.ChuckClamped
+            AND "DB_CNCIO".Status.DoorOpen
+            AND "DB_CNCIO".Status.MachineReady THEN
+            
+            #ErrorCode := UINT#0;
+            #State := 959;
+            
+        ELSIF #ScrapTimer.Q THEN
+            
+            #ErrorCode := UINT#323;
+            #State := 900;
+            
+        END_IF;
+        
+        
+    959: // CNC SCRAP RECOVERY COMPLETE
+        
+        #State := 0;
+        
+    ELSE
+        
+        #ErrorCode := UINT#399;
+        #State := 900;
+        
+END_CASE;
+
+
+// Record highest recovery state reached
+IF (#State >= 950) AND (#State <= 959) THEN
+    IF #State > #LastScrapState THEN
+        #LastScrapState := #State;
+    END_IF;
+END_IF;
+
+// ------------------------------------------
+// 6. Diagnostic outputs
+// ------------------------------------------
+#StateOut := #State;
+#Fault := (#State = 900) OR (#State = 910);
+#Busy := (#State <> 0) AND NOT #Fault;
+
+#Ready :=
+(#State = 0)
+AND "DB_CNCIO".Status.MachineReady
+AND NOT "DB_CNCIO".Status.Fault
+AND NOT "DB_CNCIO".Status.PartPresent
+AND NOT "DB_CNCIO".Status.ChuckClamped;

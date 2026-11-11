@@ -1,0 +1,21 @@
+# Local engineering/compiler caches and temporary files
+*.tmp
+*.bak
+*.log
+*.swp
+.DS_Store
+Thumbs.db
+__pycache__/
+.vscode/
+.idea/
+# Keep exports explicitly when reviewed, but avoid accidental private config
+.env
+.env.*
+secrets/
+private/
+
+# Keep raw project archives and generated WinCC runtime data out of normal Git history
+*.zap21
+*.ap21
+IM/
+Backup/
