@@ -1,14 +1,22 @@
 # Changelog
 
-## [1.0.0] — 2026-11-11 (prepared release candidate)
+## [Unreleased] — v1.1 development, 2026-11-12
 
-### Verified
-- WinCC Unified HMI compiled with 0 errors and 0 warnings.
-- Live PLC ↔ HMI interactions demonstrated: Ready and Busy indicators, HMI-initiated production, counter updates 0→1→2 and return to Ready.
-- Earlier robotic handshake, CNC machining, fault injection and recovery tests documented.
+### Added and tested in S7-PLCSIM Advanced
+- Continuous production from a single START, configurable target, batch-good count and TargetReached indication (TC-AUTO-01).
+- Operator Stop After Cycle — complete in-flight cycle and stop below target (TC-AUTO-02).
+- Deterministic machining fault 106 on attempt 3 using DB_FaultDemo (TC-AUTO-03).
+- Fault halt, operator-initiated scrap recovery and rejected-part accounting (TC-AUTO-04).
+- Explicit restart to finish interrupted target after recovery (TC-AUTO-05).
+- Second WinCC Unified screen with 16 HMI tags and verified 0-error / 0-warning compile.
+- Live Auto Running and Target Reached HMI indicators; Stop After Cycle command observed in PLC.
 
-### Limitations
-- RobotClear is manual simulation input.
-- HMI Reset has not been verified in a live fault recovery test.
-- Automatic repeat and scheduled fault campaigns are reserved for v1.1.
-- Authoritative project archive received and structurally validated. Combined external SCL export (5 FBs, 12 DBs, 4 UDTs) is included; graphical OB1 and additional FC are not included in SCL. Siemens restore and binary-archive public-distribution review remain pending.
+### Outstanding release checks
+- Export *actual final* v1.1 combined SCL/DB/UDT declarations and `.zap21` backup from TIA Portal.
+- Confirm HMI START/target writing independent of PLC watch-table operations; test final STOP state and navigation if necessary.
+- Verify no confidential runtime credentials in materials to be published; no physical safety validation.
+
+## [1.0.0] — 2026-11-11
+- Published v1.0 cell supervisor, robot/CNC simulation, state machines, handshakes, watch-table fault recovery and WinCC Unified one-cycle HMI monitoring.
+- Live two separate normal HMI-started cycles, good-parts count 0 to 2, and return to Ready.
+- Original external TIA SCL source export (five FBs, twelve DBs, four UDTs) retained in `plc/baseline_v1.0/` for historical reference.

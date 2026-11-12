@@ -1,33 +1,22 @@
-# Development roadmap
+# Roadmap
 
-## v1.0 — Baseline (tested)
+## v1.0.0 — Released 11 Nov 2026
+- Single-cycle robotic CNC simulation; robot/CNC coordination, watch-table fault testing and one-page WinCC Unified overview.
 
-- PLC robot/CNC sequence and interlocks
-- Robot job handshake / sequence IDs / watchdogs
-- CNC machining fault 106 injection and scrap recovery
-- Finished-part unloading recovery
-- Browser-based HMI with Start/Reset, KPIs and Ready/Busy/Fault status
-- Two consecutive HMI-initiated completed parts verified
-- Manual RobotClear permissive documented
+## v1.1 — Implemented and simulation-tested; source export/release checks pending
+- Auto mode, production target, continuous run, target stopping, Stop After Cycle.
+- Scheduled machining fault 106 on chosen attempt; controlled halt and rejected-part scrap recovery.
+- Explicit restart of interrupted batch without re-counting good parts.
+- Two WinCC Unified pages; live automatic batch progress and status.
+- Final source export and archive review; dedicated HMI START event test remain.
 
-## v1.1 — Batch automation and controlled faults (planned)
+## v1.2 — Reliability and operator command hardening (proposed)
+- PLC acknowledged command requests; robust HMI START and STOP handshake and communications-quality handling.
+- Clearly indicated Auto/Manual state and denied-action reasons; PLC-side permission interlocks.
+- Better attempt numbering with failed attempts tracked separately; bounded retries and raw-part inventory.
+- Additional robot execution/acceptance fault scenario regression tests.
 
-- Add explicit auto/manual mode, target parts, stop-after-cycle, raw-parts inventory
-- Supervisor owns the repeated Start pulse only after clean idle, accepted recovery and appropriate machine conditions
-- Add deterministic one-shot fault scenario manager (scheduled by cycle index and phase)
-- Reuse: DisableJobAcceptance; FreezeRobotExecution; RejectUnloadJob; InjectMachiningFault
-- Fault requires correct stop, retained workpiece state and appropriate operator acknowledgement; do not auto-clear unsafe or unresolved alarms
-- Bounded retry policy; verify no double counting; distinguish finished parts, scrap and unfinished attempts
-- Automatic fault scenario tests and real HMI reset/recovery verification
-- Ensure command ownership: avoid multiple writers to DB_RobotTest/DB_CNCTest/DB_SimControl signals
-
-## v2.0 — Industrial HMI and simulated SCADA (planned)
-
-- Robot HMI: Ready, Busy, AtHome, AtSafePosition, gripper, active JobID, SequenceID, FaultCode
-- CNC HMI: DoorOpen, DoorClosed, ChuckClamped, PartPresent, CycleRunning, CycleComplete
-- Alarm banner, history, priority, acknowledgement and tag quality
-- Cycle time, throughput, trends, production target attainment, rejects
-- Appropriate user permissions, screen navigation, supervised manual functions
-- Optional SCADA archive/reporting dependent on WinCC Unified license/runtime environment
-
-Safety note: any future motion permissive derived from robot status is still simulation-only and must never be represented as a safety-rated clearance mechanism.
+## v2.0 — Robot HMI and simulated SCADA (proposed)
+- Robot and CNC diagnostics, active job / robot status, door and chuck visualization.
+- Alarm history, acknowledgments, trend archives, cycle time, production KPIs and appropriate operator roles.
+- Physical machine-safety interface remains outside simulation scope.

@@ -1,0 +1,81 @@
+--- AutoProduction v1.1 (tested baseline)
++++ AutoProduction v1.1 + FaultDemo (uncompiled)
+@@ -60,7 +60,47 @@
+ 	"DB_CNCTest".ScrapUnloadComplete := FALSE;
+ 	
+ 	#Done := FALSE;
+-	
++
++    // --------------------------------------------------------------
++    // V1.1 demo: trigger a machining fault on one chosen AUTO attempt.
++    // This is fault SIMULATION logic, not a safety function.
++    // FB_CellController is the sole PLC writer of the two injection
++    // bits while DB_FaultDemo.Enable is TRUE.
++    // --------------------------------------------------------------
++    IF "DB_FaultDemo".Enable AND #AutoActive THEN
++        // One-based attempt number in the current batch. The failed
++        // attempt does not increment CycleCounter (good parts only).
++        "DB_FaultDemo".CurrentAttempt :=
++            (#CycleCounter - #BatchStartGood) + UDINT#1;
++
++        // CNC simulator publishes CycleRunning only in machining state.
++        // CellController runs before CNC simulator in OB1; this sees
++        // its previous-scan status and gives a reproducible trigger.
++        IF (#State = 23)
++            AND "DB_CNCIO".Status.CycleRunning
++            AND NOT "DB_FaultDemo".Triggered
++            AND ("DB_FaultDemo".TriggerAttempt > UDINT#0)
++            AND ("DB_FaultDemo".CurrentAttempt =
++                 "DB_FaultDemo".TriggerAttempt) THEN
++
++            "DB_SimControl".EnableFaultInjection := TRUE;
++            "DB_SimControl".InjectMachiningFault := TRUE;
++            "DB_FaultDemo".Triggered := TRUE;
++        END_IF;
++    END_IF;
++
++    // The CNC simulator must retain FaultCode 106, but the injection
++    // condition must be OFF before operator RESET / scrap recovery.
++    // Disable it as soon as the simulator reports a fault, or when
++    // this demo is switched off / the supervisor enters fault state.
++    IF "DB_FaultDemo".Triggered AND
++        ((NOT "DB_FaultDemo".Enable)
++         OR "DB_CNCIO".Status.Fault
++         OR (#State = 900)) THEN
++        "DB_SimControl".InjectMachiningFault := FALSE;
++        "DB_SimControl".EnableFaultInjection := FALSE;
++    END_IF;
++
+ 	// ------------------------------------------
+ 	// 4. Supervision of active production
+ 	// ------------------------------------------
+@@ -97,9 +137,14 @@
+ 
+ 	                IF #AutoMode THEN
+ 	                    IF (#TargetGoodParts > UDINT#0) AND NOT #StopAfterCycle THEN
+-	                        // Capture batch target and baseline counter at start.
+-	                        #BatchStartGood := #CycleCounter;
+-	                        #LatchedTarget := #TargetGoodParts;
++                        // A fault can pause the batch. After successful
++                        // operator-initiated recovery, a NEW Start edge
++                        // resumes the remaining good-part target.
++                        IF NOT #ResumePending THEN
++                            #BatchStartGood := #CycleCounter;
++                            #LatchedTarget := #TargetGoodParts;
++                        END_IF;
++                        #ResumePending := FALSE;
+ 	                        #StopLatched := FALSE;
+ 	                        #AutoActive := TRUE;
+ 	                        #ErrorCode := UINT#0;
+@@ -565,6 +610,11 @@
+ 
+ 	// Faults must not cause unattended automatic restart.
+ 	IF (#State = 900) OR (#State = 910) THEN
++        // Cancel unattended repetition. Preserve batch target only
++        // if an AUTO batch was active at the moment of the fault.
++        IF #AutoActive AND (#LatchedTarget > UDINT#0) THEN
++            #ResumePending := TRUE;
++        END_IF;
+ 	    #AutoActive := FALSE;
+ 	END_IF;
+ 	

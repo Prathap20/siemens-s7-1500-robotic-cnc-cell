@@ -1,10 +1,12 @@
+> **Archived v1.0 publication instructions (historical).** The v1.0 release is already public. For pushing v1.1 use [v1.1 release steps](V1_1_SOURCE_AND_RELEASE.md), not this page.
+
 # Publish v1.0 to GitHub
 
 ## Before publishing
 
 1. Review all documents/screenshots, confirm ownership and remove any sensitive information.
 2. Restore the supplied `.zap21` in Siemens TIA Portal V21 if possible and verify the project. Do not use a historic SCL snapshot as an authoritative export.
-3. Review `plc/exported/PLC_CNC_Cell_Full_Source_Export.scl` (5 FBs, 12 DBs, 4 UDTs). The graphical Main [OB1] is provided as an image; the complete engineering configuration requires the separately held `.zap21` archive.
+3. Review `plc/baseline_v1.0/PLC_CNC_Cell_v1.0_Full_Source_Export.scl` (5 FBs, 12 DBs, 4 UDTs). The graphical Main [OB1] is provided as an image; the complete engineering configuration requires the separately held `.zap21` archive.
 4. The original `.zap21` contains generated runtime/user-management configuration and historic backups. Do **not** upload it publicly until reviewed.
 
 ## Easy publish (GitHub website)

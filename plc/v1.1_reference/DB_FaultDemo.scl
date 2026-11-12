@@ -1,0 +1,12 @@
+DATA_BLOCK "DB_FaultDemo"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR
+      Enable : Bool;              // Allow one planned fault in auto mode
+      TriggerAttempt : UDInt;    // 1-based batch attempt; e.g. 3
+      CurrentAttempt : UDInt;    // Monitor only
+      Triggered : Bool;          // Latches after injection; reset manually before new demo
+   END_VAR
+BEGIN
+END_DATA_BLOCK

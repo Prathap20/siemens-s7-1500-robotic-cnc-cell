@@ -1,7 +1,5 @@
-# TIA Portal v1.0 project archive
+# TIA Portal engineering archive — private until reviewed
 
-The author supplied `Robotic_CNC_Cell_HMI_Implementation.zap21`, an approx. 40 MB project archive. This repository does not bundle it. See `docs/ARCHIVE_AUDIT.md` for its checksum and validated project version.
+The user supplied an earlier `Robotic_CNC_Cell_HMI_Implementation.zap21` (v1.0 era) which passed structural ZIP checks but was not independently restored or compiled in Siemens software.
 
-If you choose to share the archive publicly, first restore and inspect it in TIA Portal, review/remove project backup copies and security-sensitive configuration using TIA engineering tools, re-archive, and then attach the reviewed `.zap21` as a **GitHub Release asset** rather than adding it to normal Git history.
-
-The archive is a Siemens project format. This repository includes a combined generated SCL source under `plc/exported/` plus historical controller body snapshots for reference. The separate archive is still required to restore the full engineering project, including graphical OB1 and HMI.
+The **final v1.1** `Robotic_CNC_Cell_v1.1_Final.zap21` has not been provided and is not bundled in this public GitHub upload package. Archive it from the final saved TIA Portal project and retain it privately. If publishing, review backup copies, Runtime user-management records, credentials, host configuration, licensing and sharing permissions first. Prefer a reviewed GitHub Release asset over normal Git history for large binary archives.
