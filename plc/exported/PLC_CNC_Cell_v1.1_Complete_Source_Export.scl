@@ -29,6 +29,20 @@ VERSION : 0.1
 
 END_TYPE
 
+DATA_BLOCK "DB_RobotIO"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      Command { S7_SetPoint := 'False'} : "UDT_RobotCommand";
+      Status : "UDT_RobotStatus";
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
 DATA_BLOCK "DB_SimControl"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
@@ -46,19 +60,39 @@ BEGIN
 
 END_DATA_BLOCK
 
-DATA_BLOCK "DB_RobotIO"
-{ S7_Optimized_Access := 'TRUE' }
+TYPE "UDT_CNCCommand"
 VERSION : 0.1
-NON_RETAIN
-   VAR 
-      Command { S7_SetPoint := 'False'} : "UDT_RobotCommand";
-      Status : "UDT_RobotStatus";
-   END_VAR
+   STRUCT
+      OpenDoor : Bool;
+      CloseDoor : Bool;
+      ClampChuck : Bool;
+      UnclampChuck : Bool;
+      StartCycle : Bool;
+      ResetFault : Bool;
+      RobotClear : Bool;
+      SimLoadPart : Bool;
+      SimUnloadPart : Bool;
+   END_STRUCT;
 
+END_TYPE
 
-BEGIN
+TYPE "UDT_CNCStatus"
+VERSION : 0.1
+   STRUCT
+      DoorOpen : Bool;
+      DoorClosed : Bool := True;
+      ChuckClamped : Bool;
+      ChuckUnclamped : Bool;
+      PartPresent : Bool;
+      MachineReady : Bool := True;
+      CycleRunning : Bool;
+      CycleComplete : Bool;
+      Fault : Bool;
+      FaultCode : UInt;
+      MachineState : Int;
+   END_STRUCT;
 
-END_DATA_BLOCK
+END_TYPE
 
 FUNCTION_BLOCK "FB_RobotSimulator"
 { S7_Optimized_Access := 'TRUE' }
@@ -221,40 +255,6 @@ BEGIN
 	
 END_FUNCTION_BLOCK
 
-TYPE "UDT_CNCCommand"
-VERSION : 0.1
-   STRUCT
-      OpenDoor : Bool;
-      CloseDoor : Bool;
-      ClampChuck : Bool;
-      UnclampChuck : Bool;
-      StartCycle : Bool;
-      ResetFault : Bool;
-      RobotClear : Bool;
-      SimLoadPart : Bool;
-      SimUnloadPart : Bool;
-   END_STRUCT;
-
-END_TYPE
-
-TYPE "UDT_CNCStatus"
-VERSION : 0.1
-   STRUCT
-      DoorOpen : Bool;
-      DoorClosed : Bool := True;
-      ChuckClamped : Bool;
-      ChuckUnclamped : Bool;
-      PartPresent : Bool;
-      MachineReady : Bool := True;
-      CycleRunning : Bool;
-      CycleComplete : Bool;
-      Fault : Bool;
-      FaultCode : UInt;
-      MachineState : Int;
-   END_STRUCT;
-
-END_TYPE
-
 DATA_BLOCK "DB_RobotTest"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
@@ -270,6 +270,22 @@ NON_RETAIN
       ErrorCode : UInt;
       StateOut : Int;
       ActiveSequenceID : UInt;
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK "DB_FaultDemo"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      Enable : Bool;
+      TriggerAttempt : UDInt;
+      CurrentAttempt : UDInt;
+      Triggered : Bool;
    END_VAR
 
 
@@ -596,6 +612,9 @@ VERSION : 0.1
    VAR_INPUT 
       Start : Bool;
       Reset : Bool;
+      AutoMode : Bool;
+      StopAfterCycle : Bool;
+      TargetGoodParts : UDInt;
    END_VAR
 
    VAR_OUTPUT 
@@ -607,6 +626,9 @@ VERSION : 0.1
       StateOut : Int;
       PartsCompleted : UDInt;
       RejectedParts : UDInt;
+      AutoRunning : Bool;
+      BatchGoodParts : UDInt;
+      TargetReached : Bool;
    END_VAR
 
    VAR 
@@ -618,6 +640,12 @@ VERSION : 0.1
       RecoveryWatchDog {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
       ScrapRecoveryTimer {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
       RejectedCounter { S7_SetPoint := 'True'} : UDInt;
+      AutoActive : Bool;
+      StopLatched : Bool;
+      BatchStartGood : UDInt;
+      LatchedTarget : UDInt;
+      NextCycleWatchdog {InstructionName := 'TON_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TON_TIME;
+      ResumePending { S7_SetPoint := 'True'} : Bool;
    END_VAR
 
    VAR_TEMP 
@@ -626,8 +654,7 @@ VERSION : 0.1
 
 
 BEGIN
-	
-	// FB_CellController - V1.0
+	// FB_CellController - V1.1 (automatic production - first milestone)
 	// Supervisory control for robotic CNC cell
 	
 	// ------------------------------------------
@@ -635,6 +662,12 @@ BEGIN
 	// ------------------------------------------
 	#StartEdge := #Start AND NOT #PrevStart;
 	#PrevStart := #Start;
+	
+	// Request stop after current cycle if operator stops or Auto mode is deselected.
+	// No existing robot/CNC motion is interrupted here.
+	IF #AutoActive AND (#StopAfterCycle OR NOT #AutoMode) THEN
+	    #StopLatched := TRUE;
+	END_IF;
 	
 	// ------------------------------------------
 	// 2. Watchdog timers
@@ -662,6 +695,10 @@ BEGIN
 	                    PT := T#30s
 	);
 	
+	// Bound the wait between automatic production cycles.
+	#NextCycleWatchdog(IN := (#State = 110),
+	                   PT := T#15s);
+	
 	
 	// ------------------------------------------
 	// 3. Default one-scan command signals
@@ -679,6 +716,49 @@ BEGIN
 	"DB_CNCTest".ScrapUnloadComplete := FALSE;
 	
 	#Done := FALSE;
+	
+	
+	// --------------------------------------------------------------
+	// V1.1 demo: trigger a machining fault on one chosen AUTO attempt.
+	// This is fault SIMULATION logic, not a safety function.
+	// FB_CellController is the sole PLC writer of the two injection
+	// bits while DB_FaultDemo.Enable is TRUE.
+	// --------------------------------------------------------------
+	IF "DB_FaultDemo".Enable AND #AutoActive THEN
+	    
+	    // One-based attempt number in the current batch.
+	    // The failed attempt does not increment CycleCounter.
+	    "DB_FaultDemo".CurrentAttempt :=
+	    (#CycleCounter - #BatchStartGood) + UDINT#1;
+	    
+	    // Trigger only during CNC machining.
+	    IF (#State = 23)
+	        AND "DB_CNCIO".Status.CycleRunning
+	        AND NOT "DB_FaultDemo".Triggered
+	        AND ("DB_FaultDemo".TriggerAttempt > UDINT#0)
+	        AND ("DB_FaultDemo".CurrentAttempt =
+	        "DB_FaultDemo".TriggerAttempt) THEN
+	        
+	        "DB_SimControl".EnableFaultInjection := TRUE;
+	        "DB_SimControl".InjectMachiningFault := TRUE;
+	        
+	        "DB_FaultDemo".Triggered := TRUE;
+	        
+	    END_IF;
+	END_IF;
+	
+	// Clear the injection request when the simulated fault
+	// occurs, the demo is disabled, or the cell enters fault.
+	IF "DB_FaultDemo".Triggered AND
+	    ((NOT "DB_FaultDemo".Enable)
+	    OR "DB_CNCIO".Status.Fault
+	    OR (#State = 900)) THEN
+	    
+	    "DB_SimControl".InjectMachiningFault := FALSE;
+	    "DB_SimControl".EnableFaultInjection := FALSE;
+	    
+	END_IF;
+	
 	
 	// ------------------------------------------
 	// 4. Supervision of active production
@@ -707,25 +787,52 @@ BEGIN
 	CASE #State OF
 	        
 	    0: // IDLE
-	        
 	        IF #StartEdge THEN
-	            
 	            IF "DB_CNCTest".Ready
 	                AND "DB_RobotTest".ReadyForJob
 	                AND NOT "DB_CNCTest".Fault
 	                AND NOT "DB_RobotTest".Fault
 	                AND "DB_CNCIO".Command.RobotClear THEN
 	                
-	                #ErrorCode := UINT#0;
-	                #State := 10;
-	                
+	                IF #AutoMode THEN
+	                    IF (#TargetGoodParts > UDINT#0) AND NOT #StopAfterCycle THEN
+	                        // Capture batch target and baseline counter at start.
+	                        
+	                        IF NOT #ResumePending THEN
+	                            
+	                            // A new batch starts here.
+	                            #BatchStartGood := #CycleCounter;
+	                            #LatchedTarget := #TargetGoodParts;
+	                            
+	                        END_IF;
+	                        
+	                        // Clear the resume request after START is accepted.
+	                        #ResumePending := FALSE;
+	                        
+	                        #StopLatched := FALSE;
+	                        #AutoActive := TRUE;
+	                        #ErrorCode := UINT#0;
+	                        #State := 10;
+	                    ELSE
+	                        // Invalid automatic start: zero target or active stop request.
+	                        #AutoActive := FALSE;
+	                        #ErrorCode := UINT#430;
+	                        #State := 900;
+	                    END_IF;
+	                ELSE
+	                    // Preserve original single-cycle/manual Start behavior.
+	                    #BatchStartGood := #CycleCounter;
+	                    #LatchedTarget := UDINT#0;
+	                    #StopLatched := FALSE;
+	                    #AutoActive := FALSE;
+	                    #ErrorCode := UINT#0;
+	                    #State := 10;
+	                END_IF;
 	            ELSE
-	                
+	                #AutoActive := FALSE;
 	                #ErrorCode := UINT#404;
 	                #State := 900;
-	                
 	            END_IF;
-	            
 	        END_IF;
 	        
 	    10: // START CNC AUTOMATIC SEQUENCE
@@ -827,11 +934,36 @@ BEGIN
 	        END_IF;
 	        
 	    100: // CELL CYCLE COMPLETE
-	        
 	        #Done := TRUE;
-	        #State := 0;
+	        IF #AutoActive
+	            AND NOT #StopLatched
+	            AND #AutoMode
+	            AND ((#CycleCounter - #BatchStartGood) < #LatchedTarget) THEN
+	            #State := 110; // Wait until the cell is ready before next part.
+	        ELSE
+	            #AutoActive := FALSE;
+	            #State := 0;
+	        END_IF;
 	        
-	        
+	    110: // WAIT FOR NEXT AUTOMATIC CYCLE
+	        IF #StopLatched OR NOT #AutoMode
+	            OR ((#CycleCounter - #BatchStartGood) >= #LatchedTarget) THEN
+	            #AutoActive := FALSE;
+	            #State := 0;
+	        ELSIF "DB_CNCTest".Ready
+	            AND "DB_RobotTest".ReadyForJob
+	            AND NOT "DB_CNCTest".Fault
+	            AND NOT "DB_RobotTest".Fault
+	            AND "DB_CNCIO".Command.RobotClear
+	            AND NOT "DB_CNCIO".Status.PartPresent
+	            AND NOT "DB_CNCIO".Status.ChuckClamped
+	            AND NOT "DB_CNCIO".Status.Fault THEN
+	            // Reuse existing state 10 rather than re-triggering Start input.
+	            #State := 10;
+	        ELSIF #NextCycleWatchdog.Q THEN
+	            #ErrorCode := UINT#431; // Next-cycle readiness timeout.
+	            #State := 900;
+	        END_IF;
 	        
 	    900: // CELL FAULT - WAIT FOR OPERATOR RESET
 	        
@@ -1140,12 +1272,34 @@ BEGIN
 	        
 	END_CASE;
 	
+	
+	// Faults must not cause unattended automatic restart.
+	IF (#State = 900) OR (#State = 910) THEN
+	    
+	    // Preserve the target of an interrupted AUTO batch.
+	    IF #AutoActive
+	        AND (#LatchedTarget > UDINT#0) THEN
+	        
+	        #ResumePending := TRUE;
+	        
+	    END_IF;
+	    
+	    // Stop automatic production.
+	    #AutoActive := FALSE;
+	    
+	END_IF;
+	
+	
 	// ------------------------------------------
 	// 6. Output interface
 	// ------------------------------------------
 	#StateOut := #State;
 	#PartsCompleted := #CycleCounter;
 	#RejectedParts := #RejectedCounter;
+	#BatchGoodParts := #CycleCounter - #BatchStartGood;
+	#TargetReached := (#LatchedTarget > UDINT#0)
+	AND (#BatchGoodParts >= #LatchedTarget);
+	#AutoRunning := #AutoActive;
 	#Fault := (#State = 900) OR (#State = 910);
 	#Busy := (#State <> 0) AND NOT #Fault;
 	
@@ -2019,6 +2173,12 @@ NON_RETAIN
       StateOut : Int;
       PartsCompleted : UDInt;
       RejectedParts : UDInt;
+      AutoMode : Bool;
+      StopAfterCycle : Bool;
+      TargetGoodParts : UDInt;
+      AutoRunning : Bool;
+      BatchGoodParts : UDInt;
+      TargetReached : Bool;
    END_VAR
 
 
