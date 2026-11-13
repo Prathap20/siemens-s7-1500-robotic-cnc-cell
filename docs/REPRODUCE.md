@@ -1,3 +1,5 @@
+> **Historical v1.0 baseline document.** For the v1.1 test results and current code provenance see [v1.1 validation](V1_1_VALIDATION.md) and [source/release checklist](V1_1_SOURCE_AND_RELEASE.md).
+
 # Restore and reproduce v1.0
 
 ## Requirements
@@ -21,7 +23,7 @@
 
 ## Included source and future re-exports
 
-A combined generated source `plc/exported/PLC_CNC_Cell_Full_Source_Export.scl` is included (5 FBs, 12 DBs, 4 UDTs). The graphical OB1 and an additional FC are absent from that source; restore the full project from the Siemens archive to inspect them.
+A combined generated source `plc/baseline_v1.0/PLC_CNC_Cell_v1.0_Full_Source_Export.scl` is included (5 FBs, 12 DBs, 4 UDTs). The graphical OB1 and an additional FC are absent from that source; restore the full project from the Siemens archive to inspect them.
 
 If changing the PLC logic in future, generate a new external source from the tested project, and compare/export it before committing.
 

@@ -1,6 +1,8 @@
+> **Historical v1.0 baseline document.** For the v1.1 test results and current code provenance see [v1.1 validation](V1_1_VALIDATION.md) and [source/release checklist](V1_1_SOURCE_AND_RELEASE.md).
+
 # PLC external source export audit — v1.0
 
-**Included file:** [`PLC_CNC_Cell_Full_Source_Export.scl`](../plc/exported/PLC_CNC_Cell_Full_Source_Export.scl)
+**Included file:** [`PLC_CNC_Cell_v1.0_Full_Source_Export.scl`](../plc/baseline_v1.0/PLC_CNC_Cell_v1.0_Full_Source_Export.scl)
 
 - File size: **54,990 bytes**
 - SHA-256: `c45b9cee1e1c4727afcccb64e1b7068802b4266ed2b9080171222691b0a21456`

@@ -1,9 +1,9 @@
-# Authoritative TIA Portal external source export
+# Final v1.1 SCL export — required for code-complete release
 
-`PLC_CNC_Cell_Full_Source_Export.scl` contains the source for **five PLC function blocks, twelve data blocks and four user-defined data types**. It was generated from the working TIA V21 project. Use a TIA Portal V21 environment to import/compile; the file alone does not reproduce the complete engineering project.
+Place the **final** SCL export from the saved and successfully tested TIA Portal v1.1 project here:
 
-This file is a **single combined import source**. Do not import an additional export containing the same FB/UDT/DB declarations without checking for duplicates.
+`PLC_CNC_Cell_v1.1_Final_Source_Export.scl`
 
-For graphical Main [OB1] calls use the original stitched screenshot in `assets/Robotic_CNC_Cell_OB1_All_Networks.png`; the complete OB1 resides in the separately held `.zap21` project archive. An additional function shown in the Program blocks UI (`FC_RobotI...`) is not included in the SCL export.
+The export should contain updated `FB_CellController` interface/implementation, updated `DB_CellTest`, `DB_FaultDemo` and the remaining relevant SCL FBs/DBs/UDTs. Keep the separately supplied graphical OB1 wiring screenshot as evidence, but rely on the original TIA project to preserve FBD/LAD logic and the additional FC not included in the earlier export.
 
-See [Source export audit](../../docs/SOURCE_EXPORT_AUDIT.md) for exact coverage and limitations.
+**This export has not been provided in the current conversation.** The v1.0 combined SCL source is intentionally preserved in `../baseline_v1.0/`; the prepared v1.1 body/diff is under `../v1.1_reference/` and must not be mistaken for a full current source export.

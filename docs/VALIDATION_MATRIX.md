@@ -1,3 +1,5 @@
+> **Historical v1.0 baseline document.** For the v1.1 test results and current code provenance see [v1.1 validation](V1_1_VALIDATION.md) and [source/release checklist](V1_1_SOURCE_AND_RELEASE.md).
+
 # Validation matrix — v1.0 baseline
 
 **Evidence source:** operator screenshots and earlier watch-table observations during TIA Portal / S7-PLCSIM Advanced simulation. These are functional simulation observations, not hardware acceptance testing.

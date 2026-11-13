@@ -33,3 +33,14 @@ Observed OB1 order from earlier engineering screenshot: Cell Controller, Robot I
 - Watchdogs must run every PLC scan as specified.
 - Fault reset and restart must depend on physical/simulated workpiece state rather than just clearing a status bit.
 - This is non-safety-rated simulation software; no claim of real machinery compliance.
+
+
+## v1.1 extension — automatic batching and fault demonstration
+
+`FB_CellController` owns production mode, target, automatic repetition and stop-after-cycle state. It records a batch-good baseline, latches a target at accepted START and uses a wait-for-ready transition before repeating. Stop After Cycle requests completion of the current in-flight cycle before new work is issued.
+
+For demonstration only, `DB_FaultDemo.Enable`, `TriggerAttempt`, `CurrentAttempt` and `Triggered` select one machining attempt. The controller sets `DB_SimControl` fault bits when the CNC is machining; CNC fault 106 propagates to cell error 402, halting automatic repeat. After operator Reset and scrap unload via pre-existing recovery states 960–967, a **new** Start resumes the incomplete original good-part target. This is not unattended fault reset.
+
+The operator screen `02_Automatic_Production` connects to `DB_CellTest.AutoMode`, `.StopAfterCycle`, `.TargetGoodParts`, `.AutoRunning`, `.BatchGoodParts` and `.TargetReached`. The original `01_Production_Overview` remains available. The HMI has 16 tags total.
+
+The **final v1.1 external source is not bundled** here; implementation reference files reside in `plc/v1.1_reference/` and must be superseded by an actual TIA Portal final export. `RobotClear` remains a manual simulation permissive.
